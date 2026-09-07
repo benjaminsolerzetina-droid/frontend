@@ -1,0 +1,19 @@
+<section class="rack">
+  <div class="rack__stage">
+    <canvas #canvas class="rack__canvas"></canvas>
+  </div>
+
+  <nav class="rack__views" aria-label="Escenas del rack">
+    @for (view of views; track view.id) {
+      <button
+        type="button"
+        class="rack__view"
+        [class.rack__view--active]="activeView() === view.id"
+        [attr.aria-pressed]="activeView() === view.id"
+        (click)="selectView(view.id)"
+      >
+        {{ view.label }}
+      </button>
+    }
+  </nav>
+</section>
