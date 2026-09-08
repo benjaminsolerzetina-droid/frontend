@@ -1,59 +1,35 @@
-# Frontend
+# Rack de inventario
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.20.
+Modelo interactivo en Angular y Three.js, con vista superior y tres vistas anguladas. La geometría, el acabado y la iluminación se ajustan por separado.
 
-## Development server
+## Ejecutar
 
-To start a local development server, run:
+Con Node.js y npm instalados, desde esta carpeta:
 
-```bash
-ng serve
+```sh
+npm ci
+npm start
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+Abrir [localhost:4200](http://localhost:4200). Los cambios en los archivos actualizan la vista automáticamente.
 
-## Code scaffolding
+## Ajustar el modelo
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+| Parámetros               | Archivo                           | Qué controlan                                                                                                                                                                        |
+| ------------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `RACK_MEASUREMENTS`      | `src/app/rack/rack.config.ts`     | Filas, columnas, tamaño y profundidad de piezas, biseles, teselas, accesorios, márgenes y pasillos. Las medidas usan píxeles de referencia; `PX` las convierte a unidades de escena. |
+| `FINISH`                 | `src/app/rack/rack-appearance.ts` | Textura, escala física del grano, rugosidad y relieve de cada superficie.                                                                                                            |
+| `STUDIO`                 | `src/app/rack/rack-appearance.ts` | Suavidad y resolución de sombras, tamaño del fondo, variación de tono y duración de las transiciones.                                                                                |
+| `LIGHT` y `COLORS`       | `src/app/rack/rack.config.ts`     | Dirección y reparto de luz, y colores de placa y accesorios. Los tonos de los cuatro grupos están en `clusters`, dentro de `createRackLayout`.                                       |
+| `AO`, `RENDER` y `VIEWS` | `src/app/rack/rack.config.ts`     | Oscurecimiento de contacto, límites de resolución y orientación de las vistas.                                                                                                       |
 
-```bash
-ng generate component component-name
+`createRackLayout` calcula los pasos de la rejilla, las plataformas, las posiciones de los cuatro grupos y el tamaño del tablero. Al cambiar filas o columnas, adapta los accesorios laterales y centra los paneles inferiores, ajustando su cantidad de teselas sin estirarlas. El encuadre se calcula desde los límites de la geometría para cada vista y tamaño de ventana.
+
+## Verificar y compilar
+
+```sh
+node ./node_modules/@angular/cli/bin/ng.js test --watch=false
+npm run build
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+Las pruebas comprueban distribución, límites, ausencia de cruces y encuadre de cámara. La compilación de producción se guarda en `dist/frontend/browser`.

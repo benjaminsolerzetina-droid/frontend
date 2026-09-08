@@ -1,188 +1,345 @@
 /**
- * Medidas del prototipo del rack de inventario.
- *
- * Todo esta expresado en pixeles de la imagen de referencia (1546 x 1015) y se
- * convierte a unidades de mundo con PX. El origen del modelo es el centro de la
- * placa; +X a la derecha, +Y hacia arriba, +Z hacia el observador.
+ * Medidas en píxeles del tablero del prototipo, sin el marco del navegador.
+ * El origen de la escena es el centro de la placa; +Y apunta arriba y +Z fuera.
+ * Las posiciones se derivan de la rejilla y sus separaciones en createRackLayout.
  */
-
-/** Unidades de mundo por pixel de la imagen de referencia. */
 export const PX = 0.01;
 
-/** Placa base. x/y son la esquina superior izquierda en la imagen. */
-export const BOARD = {
-  x: 12,
-  y: 12,
-  w: 1428,
-  h: 988,
-  radius: 30,
-  depth: 24,
+interface GridMeasurements {
+  cols: number;
+  rows: number;
+  blockW: number;
+  blockH: number;
+  blockD: number;
+  colGap: number;
+  rowGap: number;
+  bevel: number;
+}
+
+interface PlatformMeasurements {
+  margin: number;
+  thickness: number;
+}
+
+interface TileMeasurements {
+  cell: number;
+  size: number;
+  depth: number;
+  radius: number;
+}
+
+interface RackSpacing {
+  columns: number;
+  rows: number;
+  bottomPanels: number;
+  sidebar: number;
+}
+
+interface RackMargins {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+export interface RackLayoutOptions {
+  grid?: Partial<GridMeasurements>;
+  platform?: Partial<PlatformMeasurements>;
+  tile?: Partial<TileMeasurements>;
+  spacing?: Partial<RackSpacing>;
+  margins?: Partial<RackMargins>;
+}
+
+/** Medidas independientes. Los pasos, tamaños de grupos y anclas no se duplican. */
+export const RACK_MEASUREMENTS = {
+  grid: {
+    cols: 10,
+    rows: 6,
+    blockW: 57,
+    blockH: 40,
+    blockD: 25,
+    colGap: 1,
+    rowGap: 25,
+    bevel: 1.5,
+  },
+  platform: { margin: 0, thickness: 3 },
+  tile: { cell: 20, size: 19, depth: 13, radius: 0.7 },
+  spacing: { columns: 72, rows: 68, bottomPanels: 123, sidebar: 134 },
+  margins: { left: 119, top: 91, right: 31, bottom: 39 },
+  board: { radius: 38, depth: 24, bevel: 5 },
+  accessories: {
+    leftPill: { w: 59, h: 158, radius: 17, depth: 18, bevel: 2.2 },
+    rightPill: { w: 86, h: 168, radius: 18, depth: 20, bevel: 2.2 },
+    leftPillGap: 50,
+    bottomPanelInset: 30,
+    bottomPanelRows: 3,
+    sidePanelCols: 3,
+    sidePanelRows: [14, 5, 7],
+    sidePanelTopOffset: 14,
+    sidePillGap: 20,
+    sideMidGap: 13,
+    sideBottomGap: 31,
+    cylinders: { length: 70, radius: 14, count: 3, pitch: 35, bottomInset: 17, xOffset: 5 },
+  },
 } as const;
 
-/** Centro de la placa en pixeles de la imagen: origen del modelo. */
+/** La última celda termina en su ancho, no en un paso entero. */
+const span = (count: number, pitch: number, size: number) => (count - 1) * pitch + size;
+
+/**
+ * Genera los cuatro grupos y sus accesorios desde una sola rejilla.
+ * Cambiar filas, columnas o medidas desplaza los grupos, centra los paneles
+ * inferiores y redimensiona el tablero conservando las separaciones elegidas.
+ */
+export function createRackLayout(options: RackLayoutOptions = {}) {
+  const dimensions = { ...RACK_MEASUREMENTS.grid, ...options.grid };
+  const platform = { ...RACK_MEASUREMENTS.platform, ...options.platform };
+  const tile = { ...RACK_MEASUREMENTS.tile, ...options.tile };
+  const spacing = { ...RACK_MEASUREMENTS.spacing, ...options.spacing };
+  const margins = { ...RACK_MEASUREMENTS.margins, ...options.margins };
+  const accessories = RACK_MEASUREMENTS.accessories;
+
+  for (const count of [dimensions.cols, dimensions.rows]) {
+    if (!Number.isInteger(count) || count < 1) {
+      throw new RangeError('La rejilla requiere cantidades enteras positivas de filas y columnas.');
+    }
+  }
+  for (const value of [
+    dimensions.blockW,
+    dimensions.blockH,
+    dimensions.blockD,
+    platform.thickness,
+    tile.cell,
+    tile.size,
+    tile.depth,
+  ]) {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new RangeError('Las dimensiones del rack deben ser positivas y finitas.');
+    }
+  }
+  for (const value of [
+    dimensions.colGap,
+    dimensions.rowGap,
+    dimensions.bevel,
+    platform.margin,
+    tile.radius,
+    ...Object.values(spacing),
+    ...Object.values(margins),
+  ]) {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new RangeError('Las separaciones, márgenes y biseles no pueden ser negativos.');
+    }
+  }
+  if (tile.size > tile.cell) {
+    throw new RangeError('Las teselas no pueden ser mayores que su paso.');
+  }
+  if (margins.left < accessories.leftPill.w + accessories.leftPillGap) {
+    throw new RangeError('El margen izquierdo debe alojar la pastilla y su separación.');
+  }
+
+  const grid = {
+    ...dimensions,
+    colPitch: dimensions.blockW + dimensions.colGap,
+    rowPitch: dimensions.blockH + dimensions.rowGap,
+  };
+  const gridW = span(grid.cols, grid.colPitch, grid.blockW);
+  const gridH = span(grid.rows, grid.rowPitch, grid.blockH);
+  if (gridW < tile.size) {
+    throw new RangeError('El grupo debe tener ancho suficiente para una tesela.');
+  }
+  const platformW = gridW + 2 * platform.margin;
+  const platformH = gridH + 2 * platform.margin;
+  const left = margins.left + platform.margin;
+  const top = margins.top + platform.margin;
+  const right = left + platformW + spacing.columns;
+  const bottom = top + platformH + spacing.rows;
+  const clusters = [
+    { id: 'A', x: left, y: top, color: 0xfaf9f5 },
+    { id: 'B', x: right, y: top, color: 0xf6f2e6 },
+    { id: 'C', x: left, y: bottom, color: 0xe6e4dd },
+    { id: 'D', x: right, y: bottom, color: 0xe4e5dd },
+  ];
+
+  // La cantidad de teselas sigue el ancho del grupo sin estirar las celdas.
+  const bottomCols = Math.max(
+    1,
+    Math.floor((gridW - 2 * accessories.bottomPanelInset - tile.size) / tile.cell) + 1,
+  );
+  const bottomPanelW = span(bottomCols, tile.cell, tile.size);
+  const bottomPanelH = span(accessories.bottomPanelRows, tile.cell, tile.size);
+  const bottomPanelY = bottom + gridH + platform.margin + spacing.bottomPanels;
+  const sidePanelW = span(accessories.sidePanelCols, tile.cell, tile.size);
+  const sidebarW = Math.max(
+    accessories.rightPill.w,
+    sidePanelW,
+    accessories.cylinders.length + 2 * Math.abs(accessories.cylinders.xOffset),
+  );
+  const sidebarCenter = right + gridW + platform.margin + spacing.sidebar + sidebarW / 2;
+  const sidePanelX = sidebarCenter - sidePanelW / 2;
+  const sideTopY = top + accessories.sidePanelTopOffset;
+  const sidePillY =
+    sideTopY + span(accessories.sidePanelRows[0], tile.cell, tile.size) + accessories.sidePillGap;
+  const sideMidY = sidePillY + accessories.rightPill.h + accessories.sideMidGap;
+  const sideBottomY =
+    sideMidY + span(accessories.sidePanelRows[1], tile.cell, tile.size) + accessories.sideBottomGap;
+  const tilePanels = [
+    {
+      id: 'bottom-left',
+      x: left + (gridW - bottomPanelW) / 2,
+      y: bottomPanelY,
+      cols: bottomCols,
+      rows: accessories.bottomPanelRows,
+    },
+    {
+      id: 'bottom-right',
+      x: right + (gridW - bottomPanelW) / 2,
+      y: bottomPanelY,
+      cols: bottomCols,
+      rows: accessories.bottomPanelRows,
+    },
+    {
+      id: 'right-top',
+      x: sidePanelX,
+      y: sideTopY,
+      cols: accessories.sidePanelCols,
+      rows: accessories.sidePanelRows[0],
+    },
+    {
+      id: 'right-mid',
+      x: sidePanelX,
+      y: sideMidY,
+      cols: accessories.sidePanelCols,
+      rows: accessories.sidePanelRows[1],
+    },
+    {
+      id: 'right-bottom',
+      x: sidePanelX,
+      y: sideBottomY,
+      cols: accessories.sidePanelCols,
+      rows: accessories.sidePanelRows[2],
+    },
+  ];
+  const pills = [
+    {
+      id: 'left',
+      x: left - platform.margin - accessories.leftPillGap - accessories.leftPill.w,
+      y: top,
+      ...accessories.leftPill,
+    },
+    {
+      id: 'right',
+      x: sidebarCenter - accessories.rightPill.w / 2,
+      y: sidePillY,
+      ...accessories.rightPill,
+    },
+  ];
+
+  const cylinder = accessories.cylinders;
+  const cylinderSpan = (cylinder.count - 1) * cylinder.pitch + 2 * cylinder.radius;
+  const sidebarBottom = sideBottomY + span(accessories.sidePanelRows[2], tile.cell, tile.size);
+  // También cabe la columna lateral cuando se reduce el número de filas.
+  const cylindersBottom = Math.max(
+    bottomPanelY + bottomPanelH - cylinder.bottomInset,
+    sidebarBottom + spacing.rows + cylinderSpan,
+  );
+  const cylinders = {
+    x: sidebarCenter + cylinder.xOffset - cylinder.length / 2,
+    length: cylinder.length,
+    radius: cylinder.radius,
+    centersY: Array.from(
+      { length: cylinder.count },
+      (_, index) =>
+        cylindersBottom - cylinder.radius - (cylinder.count - 1 - index) * cylinder.pitch,
+    ),
+  };
+  const board = {
+    x: 0,
+    y: 0,
+    w: sidebarCenter + sidebarW / 2 + margins.right,
+    h:
+      Math.max(bottomPanelY + bottomPanelH, cylindersBottom, pills[0].y + pills[0].h) +
+      margins.bottom,
+    ...RACK_MEASUREMENTS.board,
+  };
+
+  return {
+    board,
+    grid,
+    platform,
+    platformW,
+    platformH,
+    tile,
+    clusters,
+    tilePanels,
+    pills,
+    cylinders,
+    rowRise: platform.thickness + grid.blockD,
+  };
+}
+
+export const RACK_LAYOUT = createRackLayout();
+export const BOARD = RACK_LAYOUT.board;
+export const GRID = RACK_LAYOUT.grid;
+export const PLATFORM = RACK_LAYOUT.platform;
+export const PLATFORM_W = RACK_LAYOUT.platformW;
+export const PLATFORM_H = RACK_LAYOUT.platformH;
+export const ROW_RISE = RACK_LAYOUT.rowRise;
+export const CLUSTERS = RACK_LAYOUT.clusters;
+export const TILE = RACK_LAYOUT.tile;
+export const TILE_PANELS = RACK_LAYOUT.tilePanels;
+export const PILLS = RACK_LAYOUT.pills;
+export const CYLINDERS = RACK_LAYOUT.cylinders;
 export const ORIGIN_X = BOARD.x + BOARD.w / 2;
 export const ORIGIN_Y = BOARD.y + BOARD.h / 2;
-
-/** Cara frontal de la placa: todo lo demas se apoya sobre esta cota. */
 export const FACE_Z = BOARD.depth / 2;
-
 export const toX = (px: number) => (px - ORIGIN_X) * PX;
 export const toY = (px: number) => (ORIGIN_Y - px) * PX;
 export const toZ = (px: number) => px * PX;
 export const len = (px: number) => px * PX;
 
-/** Rejilla de bloques dentro de cada grupo: 6 filas x 10 bloques. */
-export const GRID = {
-  cols: 10,
-  rows: 6,
-  colPitch: 50.4,
-  rowPitch: 57,
-  blockW: 48.8,
-  blockH: 34,
-  blockD: 22,
-} as const;
-
-/**
- * Plataforma continua: una por conjunto, no una por fila.
- *
- * El rack esta tumbado y se mira desde arriba, asi que es una losa apoyada sobre
- * el tablero, con los diez bloques de las seis filas de pie encima. Al ser una
- * sola pieza por conjunto, lo que se ve en el hueco entre filas es su cara
- * superior, no el tablero.
- *
- * La plataforma llega exactamente al contorno de la rejilla. De esta manera,
- * en los cuatro grupos no queda un reborde visible alrededor de los bloques:
- * la placa queda a filo como en el prototipo.
- */
-export const PLATFORM = {
-  margin: 0,
-  /** Cuanto se levanta del tablero. Los bloques se apoyan sobre su cara superior. */
-  thickness: 8,
-} as const;
-
-// El ultimo bloque no ocupa un pitch completo: termina en su propio ancho.
-export const PLATFORM_W =
-  (GRID.cols - 1) * GRID.colPitch + GRID.blockW + 2 * PLATFORM.margin;
-export const PLATFORM_H =
-  (GRID.rows - 1) * GRID.rowPitch + GRID.blockH + 2 * PLATFORM.margin;
-
-/** Altura total de una fila sobre el tablero: plataforma mas bloque. */
-export const ROW_RISE = PLATFORM.thickness + GRID.blockD;
-
-/** Los cuatro grupos de bloques. x/y son la esquina superior izquierda. */
-export const CLUSTERS = [
-  // La referencia es luminosa: son blancos matizados, no beige apagado.
-  { id: 'A', x: 133, y: 90, color: 0xfcfcfa },
-  { id: 'B', x: 704, y: 90, color: 0xf8f3e8 },
-  { id: 'C', x: 133, y: 468, color: 0xeeece6 },
-  { id: 'D', x: 704, y: 468, color: 0xe8ece7 },
-] as const;
-
-/** Modulo de las teselas pequenas: una sola celda para todos los paneles. */
-export const TILE = {
-  cell: 18.3,
-  size: 16.4,
-  depth: 8,
-  radius: 1.4,
-} as const;
-
-/** Paneles de teselas. x/y son la esquina superior izquierda. */
-export const TILE_PANELS = [
-  { id: 'bottom-left', x: 152, y: 900, cols: 26, rows: 3 },
-  { id: 'bottom-right', x: 722, y: 900, cols: 26, rows: 3 },
-  { id: 'right-top', x: 1345, y: 110, cols: 3, rows: 14 },
-  { id: 'right-mid', x: 1345, y: 535, cols: 3, rows: 5 },
-  { id: 'right-bottom', x: 1345, y: 645, cols: 3, rows: 7 },
-] as const;
-
-/** Pastillas redondeadas. x/y son la esquina superior izquierda. */
-export const PILLS = [
-  { id: 'left', x: 30, y: 90, w: 48, h: 138, radius: 24, depth: 12 },
-  { id: 'right', x: 1332, y: 372, w: 68, h: 144, radius: 24, depth: 14 },
-] as const;
-
-/** Cilindros tumbados de la esquina inferior derecha (eje en X). */
-export const CYLINDERS = {
-  x: 1345,
-  length: 55,
-  radius: 12,
-  centersY: [869, 897, 925],
-} as const;
-
 export const COLORS = {
-  background: 0xf4f3ef,
-  board: 0xf9f8f5,
+  background: 0xf5f3ee,
+  board: 0xf5f3ee,
   pill: 0xf8f8f5,
   tile: 0xf3f0e8,
   cylinder: 0xf9f8f5,
 } as const;
 
 /**
- * Presupuesto de luz.
- *
- * three difunde con BRDF_Lambert = albedo / PI, asi que una superficie solo se
- * ve del color declarado en COLORS si la irradiancia total que recibe suma PI.
- * En vez de fijar intensidades a mano, aqui se declara que fraccion de esa luz
- * aporta cada fuente y la escena despeja las intensidades. Las fracciones suman
- * 1, de modo que una cara frontal (normal +Z) rinde exactamente su color.
- *
- * Todas las luces son blancas a proposito: cualquier tinte en la luz desvia el
- * color final respecto al del prototipo. El calor lo ponen los colores de COLORS.
+ * Reparto de iluminación entre la fuente principal, el relleno y el hemisferio.
+ * La fracción restante aporta luz ambiente difusa; las tres participaciones
+ * deben sumar como máximo 1. Los colores cálidos se definen en los materiales.
  */
 export const LIGHT = {
-  /** Desde arriba y a la derecha: deja la sombra abajo-izquierda como el prototipo. */
-  keyDirection: [0.26, 0.55, 1],
+  /** Dirección en el marco del tablero: sombras hacia abajo y a la izquierda. */
+  keyDirection: [0.5, 0.7, 1],
   fillDirection: [-1, 0.15, 0.75],
-  /**
-   * La clave es la unica que proyecta sombra, asi que su fraccion es tambien lo
-   * que oscurece la sombra. Medido del prototipo: la placa pasa de #F0EBE2 a
-   * ~#DDD7CC bajo cada fila, es decir ~18% menos luz.
-   */
-  keyShare: 0.22,
-  fillShare: 0.032,
-  /** Hemisferico casi neutro: mantiene iluminadas las caras que miran hacia abajo. */
-  hemiShare: 0.40,
+  /** Aporte de la fuente principal, distribuido entre las muestras de STUDIO. */
+  keyShare: 0.36,
+  fillShare: 0.04,
+  /** Luz difusa del entorno que conserva detalle en las caras laterales. */
+  hemiShare: 0.25,
   hemiGround: 0xdcdcdc,
 } as const;
 
-/**
- * Oclusion ambiental.
- *
- * Como la luz del prototipo es casi uniforme, la definicion no viene de la luz
- * direccional sino del oscurecimiento en las ranuras entre bloques y en el
- * contacto con la placa. Sin esto la escena tiene los colores correctos pero se
- * ve plana. El radio va en unidades de mundo, del orden del alto de un bloque.
- */
+/** Oclusión ambiental para juntas y contacto entre piezas. Radio en unidades de mundo. */
 export const AO = {
   radius: 0.07,
   distanceExponent: 1.2,
   thickness: 0.4,
   scale: 1,
   samples: 32,
-  /** Cuanto oscurece. Medido del prototipo: las juntas caen ~23% respecto a la cara. */
+  /** Intensidad del oscurecimiento de contacto. */
   intensity: 0.5,
-  /**
-   * Filtrado del ruido de muestreo. El radio por defecto (8) difumina juntas de
-   * pocos pixeles y deja las aristas punteadas, asi que se acorta y se compensa
-   * con mas muestras.
-   */
+  /** Suavizado del ruido de muestreo, conservando las juntas finas. */
   denoise: { radius: 4, samples: 24, rings: 3 },
 } as const;
 
-/**
- * Resolucion de render.
- *
- * El AO en espacio de pantalla no resuelve limpio detalles de uno o dos pixeles:
- * las juntas entre bloques miden ~1.6 px y salian dentadas por el ruido 5x5 que
- * usa GTAO para rotar sus muestras. Ni mas muestras ni mas denoise lo quitan; lo
- * que lo quita es renderizar por encima de la resolucion de pantalla y dejar que
- * el navegador reduzca. Ese supermuestreo tambien hace las veces de antialias,
- * por eso el render target va sin MSAA.
- */
+/** Supermuestreo para suavizar bordes y juntas, limitado por resolución y memoria. */
 export const RENDER = {
   supersample: 2,
   maxPixelRatio: 3,
-  /** Tope de pixeles del buffer, para no reventar la memoria en pantallas grandes. */
+  /** Máximo de píxeles del búfer de renderizado. */
   maxBufferPixels: 8e6,
 } as const;
 
@@ -196,25 +353,28 @@ export interface RackView {
   label: string;
   /** Giro alrededor de la normal de la placa, en grados. */
   azimuth: number;
-  /** Inclinacion respecto a la normal, en grados. Negativo = hacia el borde cercano. */
+  /** Inclinación respecto a la normal, en grados. Negativo = hacia el borde cercano. */
   elevation: number;
   /** Holgura de encuadre: 1 = la placa toca los bordes. */
   fill: number;
   /**
-   * Vector "arriba" de la camara en el marco de la placa. La cenital usa el
-   * arriba de la imagen (0,1,0), porque ahi la normal seria paralela a la
-   * mirada. Las anguladas usan la normal (0,0,1): es lo que hace que el rack se
-   * lea tumbado sobre una mesa y no colgado de una pared.
+   * Vector "arriba" de la cámara en el marco de la placa. La cenital conserva
+   * el arriba de la referencia (0,1,0); las anguladas usan la normal (0,0,1).
    */
   up: readonly [number, number, number];
 }
 
-/** Escenas fijas. La primera es la cenital: la identica a la imagen de referencia. */
+/** Vistas predefinidas. La cenital inicial conserva la orientación del prototipo. */
 export const VIEWS: readonly RackView[] = [
   { id: 'superior', label: 'Superior', azimuth: 0, elevation: 0, fill: 0.973, up: [0, 1, 0] },
-  { id: 'isometrica', label: 'Isometrica', azimuth: -32, elevation: -30, fill: 0.95, up: [0, 0, 1] },
+  {
+    id: 'isometrica',
+    label: 'Isométrica',
+    azimuth: -32,
+    elevation: -30,
+    fill: 0.95,
+    up: [0, 0, 1],
+  },
   { id: 'lateral', label: 'Lateral', azimuth: 70, elevation: -10, fill: 0.95, up: [0, 0, 1] },
   { id: 'frontal', label: 'Frontal', azimuth: 0, elevation: -70, fill: 0.95, up: [0, 0, 1] },
 ];
-
-export const CAMERA_FOV = 28;

@@ -1,6 +1,11 @@
 <section class="rack">
   <div class="rack__stage">
-    <canvas #canvas class="rack__canvas"></canvas>
+    <canvas
+      #canvas
+      class="rack__canvas"
+      role="img"
+      [attr.aria-label]="'Modelo del rack de inventario. Vista ' + activeView()"
+    >Modelo tridimensional del rack de inventario.</canvas>
   </div>
 
   <nav class="rack__views" aria-label="Escenas del rack">
