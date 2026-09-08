@@ -87,8 +87,9 @@ export class RackScene {
    */
   private readonly content = new THREE.Group();
   private readonly boardToWorld = new THREE.Quaternion();
-  private readonly limestone: THREE.Texture;
-  private readonly elementLimestone: THREE.Texture;
+  private readonly prototypeFiber: THREE.Texture;
+  private readonly elementPrototypeFiber: THREE.Texture;
+  private readonly platformPrototypeFiber: THREE.Texture;
 
   private readonly geometries: THREE.BufferGeometry[] = [];
   private readonly materials: THREE.Material[] = [];
@@ -123,10 +124,11 @@ export class RackScene {
     this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 200);
     this.scene.add(this.camera);
 
-    // Opcion 2: piedra caliza clara con poro mineral. La escala de la placa y
-    // la de los bloques se ajustan por separado para que el grano sea legible.
-    this.limestone = this.loadLimestoneTexture(2.2);
-    this.elementLimestone = this.loadLimestoneTexture(1);
+    // Acabado del prototipo: blanco calido, mate y de fibra prensada. La placa
+    // y cada bloque usan escalas independientes para mantener el detalle fino.
+    this.prototypeFiber = this.loadPrototypeFiberTexture(3);
+    this.elementPrototypeFiber = this.loadPrototypeFiberTexture(1);
+    this.platformPrototypeFiber = this.loadPrototypeFiberTexture(2);
 
     this.buildLights();
     this.buildBoard();
@@ -155,11 +157,13 @@ export class RackScene {
     return geometry;
   }
 
-  private loadLimestoneTexture(repeat: number): THREE.Texture {
-    const texture = new THREE.TextureLoader().load('assets/rack-limestone-v2.png', () => {
+  private loadPrototypeFiberTexture(repeat: number): THREE.Texture {
+    const texture = new THREE.TextureLoader().load('assets/rack-prototype-fiber-detail.png', () => {
       if (!this.disposed) this.needsRender = true;
     });
-    texture.colorSpace = THREE.SRGBColorSpace;
+    // Es un mapa de acabado, no una fotografia de color: se conserva su valor
+    // casi blanco para que aporte fibra sin ensuciar ni oscurecer la paleta.
+    texture.colorSpace = THREE.NoColorSpace;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(repeat, repeat);
@@ -276,7 +280,7 @@ export class RackScene {
     );
     const board = new THREE.Mesh(
       geometry,
-      this.surface(COLORS.board, 0.96, this.limestone, 0.0045, false),
+      this.surface(COLORS.board, 0.96, this.prototypeFiber, 0.004),
     );
     board.receiveShadow = true;
     board.castShadow = true;
@@ -299,10 +303,21 @@ export class RackScene {
     const blockZ = toZ(FACE_Z + PLATFORM.thickness + GRID.blockD / 2);
 
     for (const cluster of CLUSTERS) {
-      const material = this.surface(cluster.color, 0.92, this.elementLimestone, 0.005);
+      // El grano debe leerse sobre cada frente, incluso en la vista superior.
+      // Solo se acentua el micro-relieve: la plataforma permanece lisa.
+      const blockMaterial = this.surface(cluster.color, 0.9, this.elementPrototypeFiber, 0.007);
+      // La plataforma solo recibe el relieve: el mapa de color se concentra en
+      // los bloques para evitar las bandas nubosas que no existen en la referencia.
+      const platformMaterial = this.surface(
+        cluster.color,
+        0.94,
+        this.platformPrototypeFiber,
+        0.0005,
+        false,
+      );
 
       // Una sola plataforma por conjunto, bajo las seis filas.
-      const platform = new THREE.Mesh(platformGeometry, material);
+      const platform = new THREE.Mesh(platformGeometry, platformMaterial);
       platform.position.set(
         toX(cluster.x - PLATFORM.margin + PLATFORM_W / 2),
         toY(cluster.y - PLATFORM.margin + PLATFORM_H / 2),
@@ -311,7 +326,7 @@ export class RackScene {
       platform.castShadow = true;
       platform.receiveShadow = true;
 
-      const blocks = new THREE.InstancedMesh(blockGeometry, material, GRID.rows * GRID.cols);
+      const blocks = new THREE.InstancedMesh(blockGeometry, blockMaterial, GRID.rows * GRID.cols);
       blocks.castShadow = true;
       blocks.receiveShadow = true;
 
@@ -340,7 +355,7 @@ export class RackScene {
     const count = TILE_PANELS.reduce((total, panel) => total + panel.cols * panel.rows, 0);
     const mesh = new THREE.InstancedMesh(
       geometry,
-      this.surface(COLORS.tile, 0.92, this.elementLimestone, 0.003),
+      this.surface(COLORS.tile, 0.91, this.elementPrototypeFiber, 0.005),
       count,
     );
     mesh.castShadow = true;
@@ -366,7 +381,7 @@ export class RackScene {
   }
 
   private buildPills() {
-    const material = this.surface(COLORS.pill, 0.94, this.elementLimestone, 0.004);
+    const material = this.surface(COLORS.pill, 0.94, this.elementPrototypeFiber, 0.004);
     for (const pill of PILLS) {
       const geometry = this.track(
         roundedPlateGeometry(len(pill.w), len(pill.h), len(pill.radius), len(pill.depth), len(2.5)),
@@ -393,7 +408,7 @@ export class RackScene {
         1,
       ),
     );
-    const material = this.surface(COLORS.cylinder, 0.9, this.elementLimestone, 0.0035);
+    const material = this.surface(COLORS.cylinder, 0.9, this.elementPrototypeFiber, 0.004);
     for (const centerY of CYLINDERS.centersY) {
       const mesh = new THREE.Mesh(geometry, material);
       mesh.rotation.z = Math.PI / 2;

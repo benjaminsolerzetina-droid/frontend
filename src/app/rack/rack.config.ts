@@ -71,10 +71,11 @@ export const ROW_RISE = PLATFORM.thickness + GRID.blockD;
 
 /** Los cuatro grupos de bloques. x/y son la esquina superior izquierda. */
 export const CLUSTERS = [
-  { id: 'A', x: 133, y: 90, color: 0xf6f4ef },
-  { id: 'B', x: 704, y: 90, color: 0xede3d0 },
-  { id: 'C', x: 133, y: 468, color: 0xdfd9ce },
-  { id: 'D', x: 704, y: 468, color: 0xd4d8ce },
+  // La referencia es luminosa: son blancos matizados, no beige apagado.
+  { id: 'A', x: 133, y: 90, color: 0xfcfcfa },
+  { id: 'B', x: 704, y: 90, color: 0xf8f3e8 },
+  { id: 'C', x: 133, y: 468, color: 0xeeece6 },
+  { id: 'D', x: 704, y: 468, color: 0xe8ece7 },
 ] as const;
 
 /** Modulo de las teselas pequenas: una sola celda para todos los paneles. */
@@ -109,11 +110,11 @@ export const CYLINDERS = {
 } as const;
 
 export const COLORS = {
-  background: 0xe8e3d9,
-  board: 0xf1ede5,
-  pill: 0xf3f0e9,
-  tile: 0xebe4d5,
-  cylinder: 0xf2eee6,
+  background: 0xf4f3ef,
+  board: 0xf9f8f5,
+  pill: 0xf8f8f5,
+  tile: 0xf3f0e8,
+  cylinder: 0xf9f8f5,
 } as const;
 
 /**
