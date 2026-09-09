@@ -1,9 +1,9 @@
 import {
-  AfterViewInit,
+  afterRenderEffect,
   Component,
   ElementRef,
-  OnDestroy,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 
@@ -15,19 +15,25 @@ import { RackScene } from './rack-scene';
   templateUrl: './rack.html',
   styleUrl: './rack.scss',
 })
-export class Rack implements AfterViewInit, OnDestroy {
+export class Rack {
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   private scene?: RackScene;
 
   protected readonly views = VIEWS;
   protected readonly activeView = signal(VIEWS[0].id);
 
-  ngAfterViewInit(): void {
-    this.scene = new RackScene(this.canvasRef().nativeElement);
-  }
-
-  ngOnDestroy(): void {
-    this.scene?.dispose();
+  constructor() {
+    // La recarga de plantillas puede reemplazar el canvas sin recrear el componente.
+    afterRenderEffect((onCleanup) => {
+      const scene = new RackScene(this.canvasRef().nativeElement);
+      this.scene = scene;
+      const view = untracked(this.activeView);
+      if (view !== VIEWS[0].id) scene.setView(view);
+      onCleanup(() => {
+        scene.dispose();
+        if (this.scene === scene) this.scene = undefined;
+      });
+    });
   }
 
   protected selectView(id: string): void {

@@ -302,8 +302,6 @@ export const len = (px: number) => px * PX;
 export const COLORS = {
   background: 0xeeeae5,
   board: 0xeeeae5,
-  pill: 0xf8f8f5,
-  tile: 0xf3f0e8,
   cylinder: 0xeee9e3,
 } as const;
 
@@ -334,7 +332,7 @@ export const AO = {
   scale: 1,
   samples: 32,
   /** Intensidad del oscurecimiento de contacto. */
-  intensity: 0.5,
+  intensity: 0.75,
   /** Suavizado del ruido de muestreo, conservando las juntas finas. */
   denoise: { radius: 2, samples: 24, rings: 3 },
 } as const;
