@@ -10,8 +10,9 @@ import {
   PLATFORM, PLATFORM_H, PLATFORM_W, RENDER, RackView, TILE, TILE_PANELS,
   VIEWS, len, toX, toY, toZ,
 } from './rack.config';
-import { FINISH, STUDIO } from './rack-appearance';
+import { ACCESSORY_FINISH, FINISH, STUDIO } from './rack-appearance';
 import { fitOrthographicBounds } from './rack-camera';
+import { createBlockGeometry } from './rack-block-geometry';
 
 function roundedRectShape(w: number, h: number, r: number): THREE.Shape {
   const radius = Math.max(0.0001, Math.min(r, w / 2, h / 2));
@@ -142,11 +143,26 @@ export class RackScene {
     return texture;
   }
 
-  private surface(color: number, relief: number) {
+  private surface(color: number, relief: number, roughness: number = FINISH.roughness) {
     const material = new THREE.MeshStandardMaterial({
-      color, roughness: FINISH.roughness, metalness: 0,
+      color, roughness, metalness: 0,
       map: this.fiber, bumpMap: this.fiber, bumpScale: len(relief),
     });
+    // Cada instancia toma una zona distinta del acabado, a la misma escala física.
+    material.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader.replace('#include <common>', `
+        #include <common>
+        #ifdef USE_INSTANCING
+          attribute vec2 surfaceOffset;
+        #endif
+      `).replace('#include <uv_vertex>', `
+        #include <uv_vertex>
+        #ifdef USE_INSTANCING
+          vMapUv += surfaceOffset;
+          vBumpMapUv += surfaceOffset;
+        #endif
+      `);
+    };
     this.materials.push(material);
     return material;
   }
@@ -157,35 +173,49 @@ export class RackScene {
     this.content.add(mesh);
   }
 
+  private boardSurface(geometry: THREE.BufferGeometry) {
+    const positions = geometry.getAttribute('position');
+    const colors = new Float32Array(positions.count * 3);
+    for (let i = 0; i < positions.count; i++) {
+      const down = THREE.MathUtils.clamp(0.5 - positions.getY(i) / len(BOARD.h), 0, 1);
+      const shade = 1 - FINISH.boardShade * down;
+      colors.set([shade, shade, shade], i * 3);
+    }
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const material = this.surface(COLORS.board, FINISH.relief.board);
+    material.vertexColors = true;
+    return material;
+  }
+
   private buildBoard() {
-    this.addSolid(new THREE.Mesh(
-      this.track(roundedPlateGeometry(
+    const geometry = this.track(roundedPlateGeometry(
         len(BOARD.w), len(BOARD.h), len(BOARD.radius), len(BOARD.depth), len(BOARD.bevel),
-      )), this.surface(COLORS.board, FINISH.relief.board),
-    ));
+      ));
+    this.addSolid(new THREE.Mesh(geometry, this.boardSurface(geometry)));
   }
 
   private buildGround() {
     const size = this.bounds.getSize(new THREE.Vector3()).length() * STUDIO.groundScale;
-    const ground = new THREE.Mesh(
-      this.track(new THREE.PlaneGeometry(size, size)),
-      this.surface(COLORS.background, FINISH.relief.board),
-    );
+    const geometry = this.track(new THREE.PlaneGeometry(size, size));
+    const ground = new THREE.Mesh(geometry, this.boardSurface(geometry));
     ground.position.z = this.bounds.min.z;
     ground.receiveShadow = true;
     this.content.add(ground);
   }
 
   private buildClusters() {
-    const blockGeometry = this.track(new RoundedBoxGeometry(
-      len(GRID.blockW), len(GRID.blockH), len(GRID.blockD), 3, len(GRID.bevel),
-    ));
     const platformGeometry = this.track(new RoundedBoxGeometry(
       len(PLATFORM_W), len(PLATFORM_H), len(PLATFORM.thickness), 2,
       len(Math.min(GRID.bevel, PLATFORM.thickness / 3)),
     ));
     const matrix = new THREE.Matrix4();
     for (const cluster of CLUSTERS) {
+      const edges = cluster.edges;
+      const blockGeometry = this.track(createBlockGeometry(
+        len(GRID.blockW), len(GRID.blockH), len(GRID.blockD),
+        { side: len(edges.side), top: len(edges.top), bottom: len(edges.bottom), depth: len(edges.depth) },
+      ));
+      const surfaceOffsets = new Float32Array(GRID.rows * GRID.cols * 2);
       const platform = new THREE.Mesh(
         platformGeometry, this.surface(cluster.color, FINISH.relief.platform),
       );
@@ -196,7 +226,7 @@ export class RackScene {
       );
       this.addSolid(platform);
       const blocks = new THREE.InstancedMesh(
-        blockGeometry, this.surface(cluster.color, FINISH.relief.block), GRID.rows * GRID.cols,
+        blockGeometry, this.surface(cluster.color, cluster.relief, cluster.roughness), GRID.rows * GRID.cols,
       );
       let i = 0;
       for (let row = 0; row < GRID.rows; row++) {
@@ -207,10 +237,13 @@ export class RackScene {
             toZ(FACE_Z + PLATFORM.thickness + GRID.blockD / 2),
           );
           blocks.setMatrixAt(i, matrix);
+          surfaceOffsets[i * 2] = (cluster.x + col * GRID.colPitch) / FINISH.textureSpan;
+          surfaceOffsets[i * 2 + 1] = (cluster.y + row * GRID.rowPitch) / FINISH.textureSpan;
           const variation = ((i * 37 + cluster.x) % 17) / 16;
           blocks.setColorAt(i++, new THREE.Color().setScalar(1 - variation * STUDIO.colorVariation));
         }
       }
+      blockGeometry.setAttribute('surfaceOffset', new THREE.InstancedBufferAttribute(surfaceOffsets, 2));
       blocks.instanceMatrix.needsUpdate = true;
       this.addSolid(blocks);
     }
@@ -221,12 +254,14 @@ export class RackScene {
       len(TILE.size), len(TILE.size), len(TILE.depth), 2, len(TILE.radius),
     ));
     const mesh = new THREE.InstancedMesh(
-      geometry, this.surface(COLORS.tile, FINISH.relief.accessory),
+      geometry, this.surface(0xffffff, FINISH.relief.accessory),
       TILE_PANELS.reduce((total, panel) => total + panel.cols * panel.rows, 0),
     );
     const matrix = new THREE.Matrix4();
+    const surfaceOffsets = new Float32Array(mesh.count * 2);
     let i = 0;
     for (const panel of TILE_PANELS) {
+      const color = new THREE.Color(ACCESSORY_FINISH.panels[panel.id as keyof typeof ACCESSORY_FINISH.panels]);
       for (let row = 0; row < panel.rows; row++) {
         for (let col = 0; col < panel.cols; col++) {
           matrix.makeTranslation(
@@ -234,17 +269,23 @@ export class RackScene {
             toY(panel.y + row * TILE.cell + TILE.size / 2),
             toZ(FACE_Z + TILE.depth / 2),
           );
+          surfaceOffsets[i * 2] = (panel.x + col * TILE.cell) / FINISH.textureSpan;
+          surfaceOffsets[i * 2 + 1] = (panel.y + row * TILE.cell) / FINISH.textureSpan;
+          mesh.setColorAt(i, color);
           mesh.setMatrixAt(i++, matrix);
         }
       }
     }
+    geometry.setAttribute('surfaceOffset', new THREE.InstancedBufferAttribute(surfaceOffsets, 2));
     mesh.instanceMatrix.needsUpdate = true;
     this.addSolid(mesh);
   }
 
   private buildPills() {
-    const material = this.surface(COLORS.pill, FINISH.relief.accessory);
     for (const pill of PILLS) {
+      const material = this.surface(
+        ACCESSORY_FINISH.pills[pill.id as keyof typeof ACCESSORY_FINISH.pills], FINISH.relief.accessory,
+      );
       const mesh = new THREE.Mesh(this.track(roundedPlateGeometry(
         len(pill.w), len(pill.h), len(pill.radius), len(pill.depth), len(pill.bevel),
       )), material);
@@ -275,11 +316,18 @@ export class RackScene {
     const fillDir = new THREE.Vector3(...LIGHT.fillDirection).normalize();
     const ground = new THREE.Color(LIGHT.hemiGround).r;
     const ambientShare = 1 - LIGHT.keyShare - LIGHT.fillShare - LIGHT.hemiShare;
-    const ambient = new THREE.AmbientLight(0xffffff, Math.PI * ambientShare);
-    const hemisphere = new THREE.HemisphereLight(
-      0xffffff, LIGHT.hemiGround, Math.PI * LIGHT.hemiShare / ((ground + 1) / 2),
+    const indirect = new THREE.Color().setRGB(...LIGHT.indirectTint);
+    const direct = new THREE.Color().setRGB(
+      (1 - indirect.r * (1 - LIGHT.keyShare)) / LIGHT.keyShare,
+      (1 - indirect.g * (1 - LIGHT.keyShare)) / LIGHT.keyShare,
+      (1 - indirect.b * (1 - LIGHT.keyShare)) / LIGHT.keyShare,
     );
-    const fill = new THREE.DirectionalLight(0xffffff, Math.PI * LIGHT.fillShare / fillDir.z);
+    const ambient = new THREE.AmbientLight(indirect, Math.PI * ambientShare);
+    const hemisphere = new THREE.HemisphereLight(
+      indirect, new THREE.Color(LIGHT.hemiGround).multiply(indirect),
+      Math.PI * LIGHT.hemiShare / ((ground + 1) / 2),
+    );
+    const fill = new THREE.DirectionalLight(indirect, Math.PI * LIGHT.fillShare / fillDir.z);
     const diagonal = this.bounds.getSize(new THREE.Vector3()).length();
     fill.position.copy(fillDir).multiplyScalar(diagonal * 2);
     // Una fuente amplia: la penumbra crece con la altura de la pieza.
@@ -293,7 +341,7 @@ export class RackScene {
         1,
       ).normalize();
       const key = new THREE.DirectionalLight(
-        0xffffff, Math.PI * LIGHT.keyShare / (direction.z * STUDIO.lightSamples),
+        direct, Math.PI * LIGHT.keyShare / (direction.z * STUDIO.lightSamples),
       );
       key.castShadow = true;
       key.shadow.mapSize.set(STUDIO.shadowMapSize, STUDIO.shadowMapSize);

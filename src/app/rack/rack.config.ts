@@ -3,6 +3,8 @@
  * El origen de la escena es el centro de la placa; +Y apunta arriba y +Z fuera.
  * Las posiciones se derivan de la rejilla y sus separaciones en createRackLayout.
  */
+import { CLUSTER_FINISH } from './rack-appearance';
+
 export const PX = 0.01;
 
 interface GridMeasurements {
@@ -63,7 +65,7 @@ export const RACK_MEASUREMENTS = {
     bevel: 1.5,
   },
   platform: { margin: 0, thickness: 3 },
-  tile: { cell: 20, size: 19, depth: 13, radius: 0.7 },
+  tile: { cell: 20, size: 19, depth: 13, radius: 1.05 },
   spacing: { columns: 72, rows: 68, bottomPanels: 123, sidebar: 134 },
   margins: { left: 119, top: 91, right: 31, bottom: 39 },
   board: { radius: 38, depth: 24, bevel: 5 },
@@ -154,11 +156,11 @@ export function createRackLayout(options: RackLayoutOptions = {}) {
   const right = left + platformW + spacing.columns;
   const bottom = top + platformH + spacing.rows;
   const clusters = [
-    { id: 'A', x: left, y: top, color: 0xfaf9f5 },
-    { id: 'B', x: right, y: top, color: 0xf6f2e6 },
-    { id: 'C', x: left, y: bottom, color: 0xe6e4dd },
-    { id: 'D', x: right, y: bottom, color: 0xe4e5dd },
-  ];
+    { id: 'A', x: left, y: top, ...CLUSTER_FINISH.A },
+    { id: 'B', x: right, y: top, ...CLUSTER_FINISH.B },
+    { id: 'C', x: left, y: bottom, ...CLUSTER_FINISH.C },
+    { id: 'D', x: right, y: bottom, ...CLUSTER_FINISH.D },
+  ] as const;
 
   // La cantidad de teselas sigue el ancho del grupo sin estirar las celdas.
   const bottomCols = Math.max(
@@ -298,11 +300,11 @@ export const toZ = (px: number) => px * PX;
 export const len = (px: number) => px * PX;
 
 export const COLORS = {
-  background: 0xf5f3ee,
-  board: 0xf5f3ee,
+  background: 0xeeeae5,
+  board: 0xeeeae5,
   pill: 0xf8f8f5,
   tile: 0xf3f0e8,
-  cylinder: 0xf9f8f5,
+  cylinder: 0xeee9e3,
 } as const;
 
 /**
@@ -312,14 +314,16 @@ export const COLORS = {
  */
 export const LIGHT = {
   /** Dirección en el marco del tablero: sombras hacia abajo y a la izquierda. */
-  keyDirection: [0.5, 0.7, 1],
+  keyDirection: [0.72, 0.84, 1],
   fillDirection: [-1, 0.15, 0.75],
   /** Aporte de la fuente principal, distribuido entre las muestras de STUDIO. */
-  keyShare: 0.36,
+  keyShare: 0.5,
   fillShare: 0.04,
   /** Luz difusa del entorno que conserva detalle en las caras laterales. */
   hemiShare: 0.25,
   hemiGround: 0xdcdcdc,
+  /** Tinte lineal del entorno. La principal se compensa para conservar las caras. */
+  indirectTint: [1.1, 1, 0.86],
 } as const;
 
 /** Oclusión ambiental para juntas y contacto entre piezas. Radio en unidades de mundo. */
@@ -332,7 +336,7 @@ export const AO = {
   /** Intensidad del oscurecimiento de contacto. */
   intensity: 0.5,
   /** Suavizado del ruido de muestreo, conservando las juntas finas. */
-  denoise: { radius: 4, samples: 24, rings: 3 },
+  denoise: { radius: 2, samples: 24, rings: 3 },
 } as const;
 
 /** Supermuestreo para suavizar bordes y juntas, limitado por resolución y memoria. */
