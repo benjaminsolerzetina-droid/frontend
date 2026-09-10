@@ -136,7 +136,7 @@ export class RackScene {
   }
 
   /** Un mismo tamaño de fibra para placa, bloques, accesorios y suelo. */
-  private track(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
+  private track(geometry: THREE.BufferGeometry, lightEdges = false): THREE.BufferGeometry {
     if (geometry.index) {
       const unindexed = geometry.toNonIndexed();
       geometry.dispose();
@@ -165,6 +165,16 @@ export class RackScene {
       }
     }
     geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    if (lightEdges) {
+      const rimWeights = new Float32Array(positions.count);
+      for (let i = 0; i < positions.count; i++) {
+        const front = THREE.MathUtils.clamp(normals.getZ(i), 0, 1);
+        // Solo el bisel frontal: la cara plana y los laterales mantienen su tono.
+        rimWeights[i] =
+          front > 1e-5 && front < 1 - 1e-5 ? Math.pow(4 * front * (1 - front), 0.7) : 0;
+      }
+      geometry.setAttribute('rimWeight', new THREE.BufferAttribute(rimWeights, 1));
+    }
     this.geometries.push(geometry);
     return geometry;
   }
@@ -180,7 +190,12 @@ export class RackScene {
     return texture;
   }
 
-  private surface(color: number, relief: number, roughness: number = FINISH.roughness) {
+  private surface(
+    color: number,
+    relief: number,
+    roughness: number = FINISH.roughness,
+    lightEdges = false,
+  ) {
     const material = new THREE.MeshStandardMaterial({
       color,
       roughness,
@@ -190,13 +205,20 @@ export class RackScene {
       bumpMap: this.fiber,
       bumpScale: relief,
     });
+    if (lightEdges) material.defines = { ...material.defines, RACK_RIM: 1 };
     // Cada instancia toma una zona distinta del acabado, a la misma escala física.
     material.onBeforeCompile = (shader) => {
+      shader.uniforms['rimColor'] = { value: new THREE.Color(FINISH.rim.color) };
+      shader.uniforms['rimStrength'] = { value: FINISH.rim.strength };
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
           `
         #include <common>
+        #ifdef RACK_RIM
+          attribute float rimWeight;
+          varying float vRimWeight;
+        #endif
         #ifdef USE_INSTANCING
           attribute vec2 surfaceOffset;
         #endif
@@ -206,9 +228,37 @@ export class RackScene {
           '#include <uv_vertex>',
           `
         #include <uv_vertex>
+        #ifdef RACK_RIM
+          vRimWeight = rimWeight;
+        #endif
         #ifdef USE_INSTANCING
           vMapUv += surfaceOffset;
           vBumpMapUv += surfaceOffset;
+        #endif
+      `,
+        );
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `
+        #include <common>
+        #ifdef RACK_RIM
+          uniform vec3 rimColor;
+          uniform float rimStrength;
+          varying float vRimWeight;
+        #endif
+      `,
+        )
+        .replace(
+          '#include <color_fragment>',
+          `
+        #include <color_fragment>
+        #ifdef RACK_RIM
+          vec3 rimFinishColor = rimColor;
+          #ifdef USE_MAP
+            rimFinishColor *= sampledDiffuseColor.rgb;
+          #endif
+          diffuseColor.rgb = mix(diffuseColor.rgb, rimFinishColor, vRimWeight * rimStrength);
         #endif
       `,
         );
@@ -279,6 +329,7 @@ export class RackScene {
           bottom: len(edges.bottom),
           depth: len(edges.depth),
         }),
+        true,
       );
       const surfaceOffsets = new Float32Array(GRID.rows * GRID.cols * 2);
       const platform = new THREE.Mesh(
@@ -293,7 +344,7 @@ export class RackScene {
       this.addSolid(platform);
       const blocks = new THREE.InstancedMesh(
         blockGeometry,
-        this.surface(cluster.color, cluster.relief, cluster.roughness),
+        this.surface(cluster.color, cluster.relief, cluster.roughness, true),
         GRID.rows * GRID.cols,
       );
       let i = 0;
@@ -326,10 +377,11 @@ export class RackScene {
   private buildTiles() {
     const geometry = this.track(
       new RoundedBoxGeometry(len(TILE.size), len(TILE.size), len(TILE.depth), 2, len(TILE.radius)),
+      true,
     );
     const mesh = new THREE.InstancedMesh(
       geometry,
-      this.surface(0xffffff, FINISH.relief.accessory),
+      this.surface(0xffffff, FINISH.relief.accessory, FINISH.roughness, true),
       TILE_PANELS.reduce((total, panel) => total + panel.cols * panel.rows, 0),
     );
     const matrix = new THREE.Matrix4();

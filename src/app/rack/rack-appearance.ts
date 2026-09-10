@@ -4,6 +4,8 @@ export const FINISH = {
   textureSpan: 520,
   roughness: 0.96,
   relief: { board: 2.4, platform: 1, accessory: 2.2 },
+  /** El canto expuesto conserva un filo marfil más claro que la cara de cada pieza. */
+  rim: { color: 0xfffdf9, strength: 0.9 },
   boardShade: 0.075,
 } as const;
 
