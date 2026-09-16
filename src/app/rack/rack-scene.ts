@@ -31,6 +31,8 @@ import {
 import { ACCESSORY_FINISH, FINISH, STUDIO } from './rack-appearance';
 import { fitOrthographicBounds, fitPerspectiveBounds } from './rack-camera';
 import { createBlockGeometry } from './rack-block-geometry';
+import { RACK_SHADOW_FILTER_CHUNK } from './rack-shadow-filter';
+import { createAreaLightSamples } from './rack-light-samples';
 
 function roundedRectShape(w: number, h: number, r: number): THREE.Shape {
   const radius = Math.max(0.0001, Math.min(r, w / 2, h / 2));
@@ -238,6 +240,7 @@ export class RackScene {
       `,
         );
       shader.fragmentShader = shader.fragmentShader
+        .replace('#include <shadowmap_pars_fragment>', RACK_SHADOW_FILTER_CHUNK)
         .replace(
           '#include <common>',
           `
@@ -479,19 +482,17 @@ export class RackScene {
     const fill = new THREE.DirectionalLight(indirect, (Math.PI * LIGHT.fillShare) / fillDir.z);
     const diagonal = this.bounds.getSize(new THREE.Vector3()).length();
     fill.position.copy(fillDir).multiplyScalar(diagonal * 2);
-    // Una fuente amplia: la penumbra crece con la altura de la pieza.
-    // Las teselas conservan su contacto y las filas proyectan sombras suaves.
-    for (let i = 0; i < STUDIO.lightSamples; i++) {
-      const angle = i * Math.PI * (3 - Math.sqrt(5));
-      const radius = STUDIO.lightSpread * Math.sqrt((i + 0.5) / STUDIO.lightSamples);
+    // La distribución gaussiana mantiene el núcleo y prolonga la penumbra,
+    // con dirección y anchura independientes y sin cortar el borde de la sombra.
+    for (const sample of createAreaLightSamples(STUDIO.lightSamples, STUDIO.lightSpread)) {
       const direction = new THREE.Vector3(
-        keyDir.x / keyDir.z + Math.cos(angle) * radius,
-        keyDir.y / keyDir.z + Math.sin(angle) * radius,
+        keyDir.x / keyDir.z + sample.x,
+        keyDir.y / keyDir.z + sample.y,
         1,
       ).normalize();
       const key = new THREE.DirectionalLight(
         direct,
-        (Math.PI * LIGHT.keyShare) / (direction.z * STUDIO.lightSamples),
+        (Math.PI * LIGHT.keyShare * sample.weight) / direction.z,
       );
       key.castShadow = true;
       key.shadow.mapSize.set(STUDIO.shadowMapSize, STUDIO.shadowMapSize);

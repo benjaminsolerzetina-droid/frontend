@@ -6,31 +6,31 @@ export const FINISH = {
   relief: { board: 2.4, platform: 1, accessory: 2.2 },
   /** El canto expuesto conserva un filo marfil más claro que la cara de cada pieza. */
   rim: { color: 0xfffdf9, strength: 0.9 },
-  boardShade: 0.075,
+  boardShade: 0.09,
 } as const;
 
 /** Cada cuadrante conserva su acabado y su perfil de borde del prototipo. */
 export const CLUSTER_FINISH = {
   A: {
-    color: 0xf5f2f1,
+    color: 0xf6f3f2,
     relief: 1.2,
     roughness: 0.93,
     edges: { side: 1.8, top: 1.9, bottom: 2.6, depth: 2.4 },
   },
   B: {
-    color: 0xf5eee6,
+    color: 0xf4ece3,
     relief: 1.5,
     roughness: 0.95,
     edges: { side: 2, top: 1.9, bottom: 2.6, depth: 2.4 },
   },
   C: {
-    color: 0xd5cfc8,
+    color: 0xd6cec7,
     relief: 3,
     roughness: 0.98,
     edges: { side: 1.6, top: 1.9, bottom: 1.9, depth: 1.8 },
   },
   D: {
-    color: 0xd6d4cd,
+    color: 0xd4d1ca,
     relief: 2.6,
     roughness: 0.98,
     edges: { side: 1.8, top: 1.9, bottom: 1.9, depth: 1.8 },
@@ -52,9 +52,11 @@ export const STUDIO = {
   cameraFov: 12,
   groundScale: 8,
   shadowMapSize: 2048,
-  shadowBlur: 1.1,
+  /** Radio del filtro continuo de cada mapa; conserva el contacto sin grano aleatorio. */
+  shadowBlur: 3.2,
   lightSamples: 12,
-  lightSpread: 0.5,
+  /** Dispersión angular gaussiana: penumbra algo más ancha en horizontal. */
+  lightSpread: { x: 0.57, y: 0.5 },
   shadowMargin: 0.12,
   transitionMs: 700,
   colorVariation: 0.012,

@@ -27,6 +27,10 @@ Abrir [localhost:4200](http://localhost:4200). Los cambios en los archivos actua
 
 La escala de textura (`textureSpan`) y los perfiles de bisel usan píxeles de referencia. `relief` expresa la intensidad del material y se aplica directamente, sin conversión por `PX`.
 
+Las sombras usan un filtro PCF fijo de 16 muestras en `rack-shadow-filter.ts`, aplicado solo a los materiales del rack. Evita el ruido aleatorio al ampliar la penumbra; `STUDIO.shadowBlur` controla su radio. El filtro valida la estructura del shader de Three al cargar para detectar incompatibilidades si se actualiza la biblioteca.
+
+La fuente de luz sigue una distribución gaussiana centrada en `LIGHT.keyDirection`. `STUDIO.lightSpread.x/y` determina la dispersión horizontal y vertical de la penumbra; el contacto conserva su definición y la sombra se desvanece de forma gradual. `rack-light-samples.ts` conserva la dirección, la dispersión y la energía de la fuente con una cantidad fija de mapas de sombras.
+
 `createRackLayout` calcula los pasos de la rejilla, las plataformas, las posiciones de los cuatro grupos y el tamaño del tablero. Al cambiar filas o columnas, adapta los accesorios laterales y centra los paneles inferiores, ajustando su cantidad de teselas sin estirarlas. El encuadre se calcula desde los límites de la geometría para cada vista y tamaño de ventana.
 
 ## Verificar y compilar
